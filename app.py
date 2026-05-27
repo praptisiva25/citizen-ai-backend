@@ -9,8 +9,6 @@ import os
 import uuid
 import shutil
 
-from sqlalchemy.orm import Session
-
 from database import SessionLocal
 from database import engine
 from database import Base
@@ -18,21 +16,16 @@ from database import Base
 from models import Complaint
 from models import Cluster
 
-from classifier import classify_image
-
-from llm import extract_intent
-
-from embeddings import detect_department
-
-from clustering import should_cluster
+from utils import classify_image
+from utils import extract_intent
+from utils import detect_department
+from utils import should_cluster
 
 # -----------------------------------
 # CREATE TABLES
 # -----------------------------------
 
-Base.metadata.create_all(
-    bind=engine
-)
+Base.metadata.create_all(bind=engine)
 
 # -----------------------------------
 # FASTAPI
@@ -84,179 +77,176 @@ async def submit_complaint(
 
     db = SessionLocal()
 
-    # -----------------------------------
-    # SAVE IMAGE
-    # -----------------------------------
+    try:
 
-    extension = image.filename.split(".")[-1]
+        # -----------------------------------
+        # SAVE IMAGE
+        # -----------------------------------
 
-    filename = f"{uuid.uuid4()}.{extension}"
+        extension = image.filename.split(".")[-1]
 
-    image_path = os.path.join(
-        UPLOAD_FOLDER,
-        filename
-    )
+        filename = f"{uuid.uuid4()}.{extension}"
 
-    with open(
-        image_path,
-        "wb"
-    ) as buffer:
-
-        shutil.copyfileobj(
-            image.file,
-            buffer
+        image_path = os.path.join(
+            UPLOAD_FOLDER,
+            filename
         )
 
-    # -----------------------------------
-    # IMAGE CLASSIFICATION
-    # -----------------------------------
+        with open(
+            image_path,
+            "wb"
+        ) as buffer:
 
-    image_category = classify_image(
-        image_path
-    )
+            shutil.copyfileobj(
+                image.file,
+                buffer
+            )
 
-    # -----------------------------------
-    # TITLE WEIGHTAGE
-    # -----------------------------------
+        # -----------------------------------
+        # IMAGE CLASSIFICATION
+        # -----------------------------------
 
-    combined_text = (
-        title * 3
-        + " "
-        + description
-    )
-
-    # -----------------------------------
-    # LLM INTENT
-    # -----------------------------------
-
-    text_category = extract_intent(
-        title,
-        description
-    )
-
-    # -----------------------------------
-    # VALIDATION
-    # -----------------------------------
-
-    if image_category != text_category:
-
-        return {
-            "status": "rejected",
-            "reason": "Image and text mismatch",
-            "image_prediction": image_category,
-            "text_prediction": text_category
-        }
-
-    # -----------------------------------
-    # DEPARTMENT
-    # -----------------------------------
-
-    department = detect_department(
-        combined_text
-    )
-
-    # -----------------------------------
-    # FIND EXISTING CLUSTER
-    # -----------------------------------
-
-    all_clusters = db.query(
-        Cluster
-    ).all()
-
-    assigned_cluster = None
-
-    for cluster in all_clusters:
-
-        first_complaint = db.query(
-            Complaint
-        ).filter(
-            Complaint.cluster_id == cluster.id
-        ).first()
-
-        if not first_complaint:
-            continue
-
-        match = should_cluster(
-
-            image_category,
-
-            first_complaint.category,
-
-            latitude,
-            longitude,
-
-            first_complaint.latitude,
-            first_complaint.longitude
+        image_category = classify_image(
+            image_path
         )
 
-        if match:
+        # -----------------------------------
+        # TEXT CATEGORY
+        # -----------------------------------
 
-            assigned_cluster = cluster
+        text_category = extract_intent(
+            title,
+            description
+        )
 
-            break
+        # -----------------------------------
+        # VALIDATION
+        # -----------------------------------
 
-    # -----------------------------------
-    # CREATE NEW CLUSTER
-    # -----------------------------------
+        if image_category != text_category:
 
-    if assigned_cluster is None:
+            return {
+                "status": "rejected",
+                "reason": "Image and text mismatch",
+                "image_prediction": image_category,
+                "text_prediction": text_category
+            }
 
-        assigned_cluster = Cluster(
+        # -----------------------------------
+        # DEPARTMENT
+        # -----------------------------------
+
+        combined_text = title + " " + description
+
+        department = detect_department(
+            combined_text
+        )
+
+        # -----------------------------------
+        # FIND EXISTING CLUSTER
+        # -----------------------------------
+
+        all_clusters = db.query(
+            Cluster
+        ).all()
+
+        assigned_cluster = None
+
+        for cluster in all_clusters:
+
+            first_complaint = db.query(
+                Complaint
+            ).filter(
+                Complaint.cluster_id == cluster.id
+            ).first()
+
+            if not first_complaint:
+                continue
+
+            match = should_cluster(
+
+                image_category,
+
+                first_complaint.category,
+
+                latitude,
+                longitude,
+
+                first_complaint.latitude,
+                first_complaint.longitude
+            )
+
+            if match:
+
+                assigned_cluster = cluster
+                break
+
+        # -----------------------------------
+        # CREATE NEW CLUSTER
+        # -----------------------------------
+
+        if assigned_cluster is None:
+
+            assigned_cluster = Cluster(
+
+                category=image_category,
+
+                department=department
+            )
+
+            db.add(
+                assigned_cluster
+            )
+
+            db.commit()
+
+            db.refresh(
+                assigned_cluster
+            )
+
+        # -----------------------------------
+        # SAVE COMPLAINT
+        # -----------------------------------
+
+        complaint = Complaint(
+
+            title=title,
+
+            description=description,
+
+            intent=text_category,
 
             category=image_category,
 
-            department=department
+            department=department,
+
+            latitude=latitude,
+
+            longitude=longitude,
+
+            image_path=image_path,
+
+            cluster_id=assigned_cluster.id
         )
 
         db.add(
-            assigned_cluster
+            complaint
         )
 
         db.commit()
 
-        db.refresh(
-            assigned_cluster
-        )
+        return {
 
-    # -----------------------------------
-    # SAVE COMPLAINT
-    # -----------------------------------
+            "status": "success",
 
-    complaint = Complaint(
+            "cluster_id": assigned_cluster.id,
 
-        title=title,
+            "department": department
+        }
 
-        description=description,
+    finally:
 
-        intent=text_category,
-
-        category=image_category,
-
-        department=department,
-
-        latitude=latitude,
-
-        longitude=longitude,
-
-        image_path=image_path,
-
-        cluster_id=assigned_cluster.id
-    )
-
-    db.add(
-        complaint
-    )
-
-    db.commit()
-
-    return {
-
-        "status": "success",
-
-        "cluster_id": assigned_cluster.id,
-
-        "department": department
-    }
+        db.close()
 
 # -----------------------------------
 # GET CLUSTERS
@@ -267,132 +257,62 @@ def get_clusters():
 
     db = SessionLocal()
 
-    clusters = db.query(
-        Cluster
-    ).all()
+    try:
 
-    output = []
-
-    for cluster in clusters:
-
-        complaints = db.query(
-            Complaint
-        ).filter(
-            Complaint.cluster_id == cluster.id
+        clusters = db.query(
+            Cluster
         ).all()
 
-        complaint_data = []
+        output = []
 
-        for c in complaints:
+        for cluster in clusters:
 
-            complaint_data.append({
+            complaints = db.query(
+                Complaint
+            ).filter(
+                Complaint.cluster_id == cluster.id
+            ).all()
 
-                "id": c.id,
+            complaint_data = []
 
-                "title": c.title,
+            for c in complaints:
 
-                "description": c.description,
+                complaint_data.append({
 
-                "intent": c.intent,
+                    "id": c.id,
 
-                "category": c.category,
+                    "title": c.title,
 
-                "department": c.department,
+                    "description": c.description,
 
-                "latitude": c.latitude,
+                    "intent": c.intent,
 
-                "longitude": c.longitude,
+                    "category": c.category,
 
-                "image_path": c.image_path
+                    "department": c.department,
+
+                    "latitude": c.latitude,
+
+                    "longitude": c.longitude,
+
+                    "image_path": c.image_path
+                })
+
+            output.append({
+
+                "cluster_id": cluster.id,
+
+                "category": cluster.category,
+
+                "department": cluster.department,
+
+                "status": cluster.status,
+
+                "complaints": complaint_data
             })
 
-        output.append({
+        return output
 
-            "cluster_id": cluster.id,
+    finally:
 
-            "category": cluster.category,
-
-            "department": cluster.department,
-
-            "status": cluster.status,
-
-            "complaints": complaint_data
-        })
-
-    return output
-
-# -----------------------------------
-# DELETE CLUSTER
-# -----------------------------------
-
-@app.delete("/cluster/{cluster_id}")
-def delete_cluster(
-    cluster_id: int
-):
-
-    db = SessionLocal()
-
-    cluster = db.query(
-        Cluster
-    ).filter(
-        Cluster.id == cluster_id
-    ).first()
-
-    db.delete(cluster)
-
-    db.commit()
-
-    return {
-        "message": "Cluster deleted"
-    }
-
-# -----------------------------------
-# DELETE COMPLAINT
-# -----------------------------------
-
-@app.delete("/complaint/{complaint_id}")
-def delete_complaint(
-    complaint_id: int
-):
-
-    db = SessionLocal()
-
-    complaint = db.query(
-        Complaint
-    ).filter(
-        Complaint.id == complaint_id
-    ).first()
-
-    cluster_id = complaint.cluster_id
-
-    db.delete(
-        complaint
-    )
-
-    db.commit()
-
-    # DELETE EMPTY CLUSTER
-
-    remaining = db.query(
-        Complaint
-    ).filter(
-        Complaint.cluster_id == cluster_id
-    ).count()
-
-    if remaining == 0:
-
-        cluster = db.query(
-            Cluster
-        ).filter(
-            Cluster.id == cluster_id
-        ).first()
-
-        db.delete(
-            cluster
-        )
-
-        db.commit()
-
-    return {
-        "message": "Complaint deleted"
-    }
+        db.close()
