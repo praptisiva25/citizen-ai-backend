@@ -1,0 +1,90 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: citizen-ai-backend
+    command: ["python", "app.py"]
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: postgresql://citizen:citizen@postgres:5432/citizen_ai
+      OLLAMA_HOST: http://ollama:11434
+      HF_HOME: /home/appuser/.cache/huggingface
+      TRANSFORMERS_CACHE: /home/appuser/.cache/huggingface/transformers
+      TORCH_HOME: /home/appuser/.cache/torch
+      SENTENCE_TRANSFORMERS_HOME: /home/appuser/.cache/sentence-transformers
+      XDG_CACHE_HOME: /home/appuser/.cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    volumes:
+      - uploads-data:/app/uploads
+      - hf-cache:/home/appuser/.cache
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - python -c "import socket; s = socket.create_connection(('127.0.0.1', 8000), 2); s.close()"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: citizen-ai-postgres
+    environment:
+      POSTGRES_USER: citizen
+      POSTGRES_PASSWORD: citizen
+      POSTGRES_DB: citizen_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U citizen -d citizen_ai
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: citizen-ai-ollama
+    ports:
+      - "11434:11434"
+    command:
+      - /bin/sh
+      - -lc
+      - |
+          ollama serve &
+          pid=$$!
+          until ollama list >/dev/null 2>&1; do
+            sleep 1
+          done
+          ollama pull qwen2.5:1.5b
+          wait $$pid
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - ollama list 2>/dev/null | grep -q 'qwen2.5:1.5b'
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+volumes:
+  postgres-data:
+  uploads-data:
+  hf-cache:
+  ollama-data:
