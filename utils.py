@@ -19,9 +19,6 @@ from math import atan2
 
 import ollama
 
-# -----------------------------------
-# CNN MODEL
-# -----------------------------------
 
 tf.get_logger().setLevel(
     "ERROR"
@@ -41,9 +38,6 @@ CLASS_NAMES = [
     "pothole"
 ]
 
-# -----------------------------------
-# IMAGE CLASSIFICATION
-# -----------------------------------
 
 def classify_image(image_path):
 
@@ -77,9 +71,6 @@ def classify_image(image_path):
         class_index
     ]
 
-# -----------------------------------
-# SLM
-# -----------------------------------
 
 def extract_intent(
     title,
@@ -131,9 +122,6 @@ def extract_intent(
 
     return "unknown"
 
-# -----------------------------------
-# EMBEDDINGS
-# -----------------------------------
 
 embedder = SentenceTransformer(
     "all-MiniLM-L6-v2"
@@ -190,9 +178,6 @@ def detect_department(text):
 
     return best_department
 
-# -----------------------------------
-# DISTANCE
-# -----------------------------------
 
 def haversine_distance(
 
@@ -231,9 +216,6 @@ def haversine_distance(
 
     return R * c
 
-# -----------------------------------
-# CLUSTER MATCH
-# -----------------------------------
 
 def should_cluster(
 
