@@ -21,21 +21,11 @@ from utils import extract_intent
 from utils import detect_department
 from utils import should_cluster
 
-# -----------------------------------
-# CREATE TABLES
-# -----------------------------------
 
 Base.metadata.create_all(bind=engine)
 
-# -----------------------------------
-# FASTAPI
-# -----------------------------------
-
 app = FastAPI()
 
-# -----------------------------------
-# CORS
-# -----------------------------------
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,9 +69,6 @@ async def submit_complaint(
 
     try:
 
-        # -----------------------------------
-        # SAVE IMAGE
-        # -----------------------------------
 
         extension = image.filename.split(".")[-1]
 
@@ -102,26 +89,16 @@ async def submit_complaint(
                 buffer
             )
 
-        # -----------------------------------
-        # IMAGE CLASSIFICATION
-        # -----------------------------------
-
         image_category = classify_image(
             image_path
         )
 
-        # -----------------------------------
-        # TEXT CATEGORY
-        # -----------------------------------
 
         text_category = extract_intent(
             title,
             description
         )
 
-        # -----------------------------------
-        # VALIDATION
-        # -----------------------------------
 
         if image_category != text_category:
 
@@ -132,9 +109,6 @@ async def submit_complaint(
                 "text_prediction": text_category
             }
 
-        # -----------------------------------
-        # DEPARTMENT
-        # -----------------------------------
 
         combined_text = title + " " + description
 
@@ -142,9 +116,6 @@ async def submit_complaint(
             combined_text
         )
 
-        # -----------------------------------
-        # FIND EXISTING CLUSTER
-        # -----------------------------------
 
         all_clusters = db.query(
             Cluster
@@ -181,9 +152,6 @@ async def submit_complaint(
                 assigned_cluster = cluster
                 break
 
-        # -----------------------------------
-        # CREATE NEW CLUSTER
-        # -----------------------------------
 
         if assigned_cluster is None:
 
@@ -204,9 +172,6 @@ async def submit_complaint(
                 assigned_cluster
             )
 
-        # -----------------------------------
-        # SAVE COMPLAINT
-        # -----------------------------------
 
         complaint = Complaint(
 
@@ -248,9 +213,6 @@ async def submit_complaint(
 
         db.close()
 
-# -----------------------------------
-# GET CLUSTERS
-# -----------------------------------
 
 @app.get("/clusters")
 def get_clusters():
