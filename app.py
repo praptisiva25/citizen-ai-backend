@@ -35,9 +35,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -----------------------------------
-# UPLOADS
-# -----------------------------------
 
 UPLOAD_FOLDER = "uploads"
 
@@ -46,9 +43,6 @@ os.makedirs(
     exist_ok=True
 )
 
-# -----------------------------------
-# SUBMIT COMPLAINT
-# -----------------------------------
 
 @app.post("/submit")
 async def submit_complaint(
