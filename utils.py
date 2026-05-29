@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -24,10 +25,23 @@ tf.get_logger().setLevel(
     "ERROR"
 )
 
-cnn_model = tf.keras.models.load_model(
-    "efficientnet_model2.keras",
-    compile=False
-)
+@lru_cache(maxsize=1)
+def get_cnn_model():
+
+    model_path = "efficientnet_model2.keras"
+
+    if not os.path.exists(model_path):
+
+        raise FileNotFoundError(
+            f"Missing model file: {model_path}"
+        )
+
+    return tf.keras.models.load_model(
+
+        model_path,
+
+        compile=False
+    )
 
 CLASS_NAMES = [
 
@@ -40,6 +54,8 @@ CLASS_NAMES = [
 
 
 def classify_image(image_path):
+
+    cnn_model = get_cnn_model()
 
     image = Image.open(
         image_path
@@ -123,9 +139,12 @@ def extract_intent(
     return "unknown"
 
 
-embedder = SentenceTransformer(
-    "all-MiniLM-L6-v2"
-)
+@lru_cache(maxsize=1)
+def get_embedder():
+
+    return SentenceTransformer(
+        "all-MiniLM-L6-v2"
+    )
 
 departments = {
 
@@ -143,6 +162,8 @@ departments = {
 }
 
 def detect_department(text):
+
+    embedder = get_embedder()
 
     text_embedding = embedder.encode(
         text

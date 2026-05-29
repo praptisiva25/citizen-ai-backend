@@ -5,9 +5,17 @@ from fastapi import Form
 
 from fastapi.middleware.cors import CORSMiddleware
 
+from dotenv import load_dotenv
+
 import os
 import uuid
 import shutil
+
+import uvicorn
+
+load_dotenv(
+    ".env.local"
+)
 
 from database import SessionLocal
 from database import engine
@@ -272,3 +280,15 @@ def get_clusters():
     finally:
 
         db.close()
+
+
+if __name__ == "__main__":
+
+    uvicorn.run(
+
+        app,
+
+        host="0.0.0.0",
+
+        port=8000
+    )
