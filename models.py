@@ -8,9 +8,6 @@ from sqlalchemy.orm import relationship
 
 from database import Base
 
-# -----------------------------------
-# CLUSTER TABLE
-# -----------------------------------
 
 class Cluster(Base):
 
@@ -36,10 +33,6 @@ class Cluster(Base):
         back_populates="cluster",
         cascade="all, delete"
     )
-
-# -----------------------------------
-# COMPLAINT TABLE
-# -----------------------------------
 
 class Complaint(Base):
 
