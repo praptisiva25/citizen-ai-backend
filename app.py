@@ -24,16 +24,15 @@ from database import Base
 from models import Complaint
 from models import Cluster
 
-from utils import classify_image
-from utils import extract_intent
-from utils import detect_department
-from utils import should_cluster
+from utils1 import classify_image
+from utils1 import extract_intent
+from utils1 import detect_department
+from utils1 import haversine_distance
 
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,7 +41,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 UPLOAD_FOLDER = "uploads"
 
@@ -71,7 +69,6 @@ async def submit_complaint(
 
     try:
 
-
         extension = image.filename.split(".")[-1]
 
         filename = f"{uuid.uuid4()}.{extension}"
@@ -95,12 +92,10 @@ async def submit_complaint(
             image_path
         )
 
-
         text_category = extract_intent(
             title,
             description
         )
-
 
         if image_category != text_category:
 
@@ -111,13 +106,9 @@ async def submit_complaint(
                 "text_prediction": text_category
             }
 
-
-        combined_text = title + " " + description
-
         department = detect_department(
-            combined_text
+            image_category
         )
-
 
         all_clusters = db.query(
             Cluster
@@ -125,35 +116,50 @@ async def submit_complaint(
 
         assigned_cluster = None
 
+        nearest_distance = float("inf")
+
         for cluster in all_clusters:
 
-            first_complaint = db.query(
+            complaints = db.query(
                 Complaint
             ).filter(
                 Complaint.cluster_id == cluster.id
-            ).first()
+            ).all()
 
-            if not first_complaint:
+            if not complaints:
                 continue
 
-            match = should_cluster(
+            if complaints[0].category != image_category:
+                continue
 
-                image_category,
+            avg_lat = sum(
+                c.latitude
+                for c in complaints
+            ) / len(complaints)
 
-                first_complaint.category,
+            avg_lon = sum(
+                c.longitude
+                for c in complaints
+            ) / len(complaints)
+
+            distance = haversine_distance(
 
                 latitude,
                 longitude,
 
-                first_complaint.latitude,
-                first_complaint.longitude
+                avg_lat,
+                avg_lon
             )
 
-            if match:
+            print(
+                f"Cluster {cluster.id} centroid distance = {distance:.2f} m"
+            )
+
+            if distance <= 25 and distance < nearest_distance:
+
+                nearest_distance = distance
 
                 assigned_cluster = cluster
-                break
-
 
         if assigned_cluster is None:
 
@@ -173,7 +179,6 @@ async def submit_complaint(
             db.refresh(
                 assigned_cluster
             )
-
 
         complaint = Complaint(
 

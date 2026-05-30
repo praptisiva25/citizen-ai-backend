@@ -3,7 +3,6 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm import declarative_base
 
 from dotenv import load_dotenv
-
 import os
 
 load_dotenv()
@@ -13,7 +12,9 @@ DATABASE_URL = os.getenv(
 )
 
 engine = create_engine(
-    DATABASE_URL
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=300
 )
 
 SessionLocal = sessionmaker(
